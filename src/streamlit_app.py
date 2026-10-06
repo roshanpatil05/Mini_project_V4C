@@ -376,7 +376,7 @@ def render_analytics() -> None:
 
 st.sidebar.markdown('<div class="brand-mark"><span>V4C</span>.ai</div>', unsafe_allow_html=True)
 page = st.sidebar.radio("Workspace", [f"{PAGE_ICONS[item]}  {item}" for item in PAGES], label_visibility="collapsed")
-page = page.split("  ", 1)[1]
+page = page.split("  ", 1)[1].strip()
 
 if page == "Overview":
     render_overview()
