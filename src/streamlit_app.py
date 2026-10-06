@@ -32,8 +32,8 @@ apply_theme()
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
 PAGES = ["Overview", "Employee Onboarding", "Project Management", "Performance Reviews", "Analytics Dashboard"]
-PAGE_ICONS = {"Overview": "◈", "Employee Onboarding": "＋", "Project Management": "◆", "Performance Reviews": "✓", "Analytics Dashboard": "◒"}
-
+PAGE_ICONS = {"Overview": " ", "Employee Onboarding": " ", "Project Management": " ", "Performance Reviews": " ", "Analytics Dashboard": " "}
+# PAGE_ICONS = {"Overview": "◈", "Employee Onboarding": "＋", "Project Management": "◆", "Performance Reviews": "✓", "Analytics Dashboard": "◒"}
 
 @st.cache_data
 def load_local_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
