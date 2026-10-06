@@ -69,6 +69,8 @@ class DatabaseConnection:
 			raise RuntimeError(f"Database operation failed: {exc}") from exc
 
 	def fetch_all(self, query: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
+		# Commit any open read-transaction so InnoDB gives a fresh snapshot.
+		self.get_connection().commit()
 		cursor = self.execute(query, params)
 		try:
 			return cursor.fetchall()
@@ -76,6 +78,8 @@ class DatabaseConnection:
 			cursor.close()
 
 	def fetch_one(self, query: str, params: tuple[Any, ...] = ()) -> dict[str, Any] | None:
+		# Commit any open read-transaction so InnoDB gives a fresh snapshot.
+		self.get_connection().commit()
 		cursor = self.execute(query, params)
 		try:
 			return cursor.fetchone()
