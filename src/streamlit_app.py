@@ -35,7 +35,7 @@ PAGES = ["Overview", "Employee Onboarding", "Project Management", "Performance R
 PAGE_ICONS = {"Overview": " ", "Employee Onboarding": " ", "Project Management": " ", "Performance Reviews": " ", "Analytics Dashboard": " "}
 # PAGE_ICONS = {"Overview": "◈", "Employee Onboarding": "＋", "Project Management": "◆", "Performance Reviews": "✓", "Analytics Dashboard": "◒"}
 
-@st.cache_data
+# @st.cache_data
 def load_local_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     employees_path = DATA_DIR / "synthetic_employees.csv"
     history_path = DATA_DIR / "employee_scd2_history.csv"
@@ -134,25 +134,45 @@ def render_department_field(departments: list[dict], key: str = "department") ->
 
 
 def render_overview() -> None:
-    employees, _, reviews = load_local_data()
     page_header("Enterprise Employee <span class='gradient-text'>Analytics</span>", "People, performance, and project allocation")
     section_title("Workforce overview")
-    departments = int(employees["department_name"].nunique()) if not employees.empty else 8
-    average_score = f"{reviews['overall_score'].mean():.1f}" if not reviews.empty else "--"
+    
     warehouse_connected = bool(get_department_choices())
+    
+    # Try fetching from MySQL first
+    if warehouse_connected:
+        try:
+            metrics = AnalyticsManager().get_overview_metrics()
+            total_employees = metrics["total_employees"]
+            departments = metrics["total_departments"]
+            average_score = f"{metrics['average_score']:.1f}"
+            counts = pd.DataFrame(metrics["distribution"])
+        except Exception:
+            warehouse_connected = False
+
+    # Fallback to CSV if MySQL is unreachable or failed
+    if not warehouse_connected:
+        employees, _, reviews = load_local_data()
+        departments = int(employees["department_name"].nunique()) if not employees.empty else 8
+        average_score = f"{reviews['overall_score'].mean():.1f}" if not reviews.empty else "--"
+        total_employees = len(employees) if not employees.empty else 100_000
+        counts = employees.groupby("department_name", as_index=False).size().sort_values("size", ascending=True) if not employees.empty else pd.DataFrame()
+        info_pill("Showing local synthetic data for the overview page (MySQL connection failed)")
+
     kpis = st.columns(4)
     with kpis[0]:
-        kpi_card("Total employees", f"{len(employees):,}" if not employees.empty else "100,000", icon="♙")
+        kpi_card("Total employees", f"{total_employees:,}", icon="♙")
     with kpis[1]:
         kpi_card("Departments", departments, icon="⌘")
     with kpis[2]:
         kpi_card("Data source", "MySQL" if warehouse_connected else "Local preview", icon="◉")
     with kpis[3]:
         kpi_card("Average review score", average_score, icon="✦")
+        
     st.markdown("<div style='height:.9rem'></div>", unsafe_allow_html=True)
     status_badge("Connected to MySQL" if warehouse_connected else "Local preview", "success" if warehouse_connected else "warning")
-    if not employees.empty:
-        counts = employees.groupby("department_name", as_index=False).size().sort_values("size", ascending=True)
+    
+    if not counts.empty:
         fig = px.bar(
             counts,
             x="size",

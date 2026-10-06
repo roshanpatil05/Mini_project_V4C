@@ -234,4 +234,25 @@ class AnalyticsManager(DatabaseConnection):
                WHERE e.is_current = TRUE
                GROUP BY d.department_name ORDER BY avg_attrition_risk DESC"""
         )
+
+    def get_overview_metrics(self) -> dict[str, Any]:
+        total_employees = self.fetch_one("SELECT COUNT(*) as count FROM employees")["count"]
+        total_departments = self.fetch_one("SELECT COUNT(*) as count FROM departments")["count"]
+        avg_score_row = self.fetch_one("SELECT AVG(overall_score) as avg_score FROM performance_reviews")
+        avg_score = float(avg_score_row["avg_score"]) if avg_score_row["avg_score"] is not None else 0.0
+        
+        distribution = self.fetch_all("""
+            SELECT d.department_name, COUNT(e.employee_id) as size
+            FROM employees e
+            JOIN departments d ON e.department_id = d.department_id
+            GROUP BY d.department_name
+            ORDER BY size ASC
+        """)
+        
+        return {
+            "total_employees": total_employees,
+            "total_departments": total_departments,
+            "average_score": avg_score,
+            "distribution": distribution
+        }
     #commenta
