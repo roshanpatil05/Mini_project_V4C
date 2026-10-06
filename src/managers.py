@@ -66,7 +66,7 @@ class EmployeeManager(DatabaseConnection):
         salary: float | None = None,
     ) -> None:
         connection = self.get_connection()
-        cursor = connection.cursor(dictionary=True)
+        cursor = connection.cursor()
         today = date.today()
         try:
             cursor.execute(

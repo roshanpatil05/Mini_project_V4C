@@ -3,8 +3,9 @@ from __future__ import annotations
 from threading import RLock
 from typing import Any
 
-import mysql.connector
-from mysql.connector import Error as MySQLError
+import pymysql
+import pymysql.cursors
+from pymysql import Error as MySQLError
 
 from src.config.settings import settings
 
@@ -28,16 +29,27 @@ class DatabaseConnection:
 		self._connection_lock = RLock()
 		self._initialized = True
 
+	def _is_alive(self) -> bool:
+		"""Check whether the current connection is usable."""
+		if self._connection is None:
+			return False
+		try:
+			self._connection.ping(reconnect=False)
+			return True
+		except Exception:
+			return False
+
 	def get_connection(self):
 		with self._connection_lock:
 			try:
-				if self._connection is None or not self._connection.is_connected():
-					self._connection = mysql.connector.connect(
+				if not self._is_alive():
+					self._connection = pymysql.connect(
 						host=settings.host,
 						port=settings.port,
 						user=settings.user,
 						password=settings.password,
 						database=settings.database,
+						cursorclass=pymysql.cursors.DictCursor,
 					)
 				return self._connection
 			except MySQLError as exc:
@@ -45,7 +57,7 @@ class DatabaseConnection:
 
 	def execute(self, query: str, params: tuple[Any, ...] = (), commit: bool = False):
 		connection = self.get_connection()
-		cursor = connection.cursor(dictionary=True)
+		cursor = connection.cursor()
 		try:
 			cursor.execute(query, params)
 			if commit:
@@ -72,6 +84,10 @@ class DatabaseConnection:
 
 	def close(self) -> None:
 		with self._connection_lock:
-			if self._connection is not None and self._connection.is_connected():
-				self._connection.close()
+			if self._connection is not None:
+				try:
+					self._connection.close()
+				except Exception:
+					pass
 			self._connection = None
+
