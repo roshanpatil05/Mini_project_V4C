@@ -530,22 +530,12 @@ def render_reviews() -> None:
 def render_analytics() -> None:
     page_header("Performance <span class='gradient-text'>analytics</span>", "Read workforce momentum, high performers, and risk at a glance")
     
-    ctrl_col1, ctrl_col2 = st.columns([1, 1])
-    with ctrl_col1:
-        department_label = st.radio(
-            "Attribute reviews to",
-            ["Department at time of review", "Current department"],
-            horizontal=True,
-            help="Historical attribution uses the employee dimension version effective on the review date.",
-        )
-    
-    department_basis = "review" if department_label == "Department at time of review" else "current"
+    department_basis = "review"
     
     departments_list = get_department_choices()
     dept_names = ["All departments"] + sorted([d["department_name"] for d in departments_list])
     
-    with ctrl_col2:
-        selected_department = st.selectbox("Filter dashboard by department", dept_names)
+    selected_department = st.selectbox("Filter dashboard by department", dept_names)
         
     analytics = AnalyticsManager()
     try:
