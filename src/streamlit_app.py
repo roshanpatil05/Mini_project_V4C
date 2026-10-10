@@ -31,8 +31,8 @@ from src.ui.theme import (
 apply_theme()
 
 DATA_DIR = Path(__file__).resolve().parent / "data"
-PAGES = ["Overview", "Employee Onboarding", "Project Management", "Performance Reviews", "Analytics Dashboard"]
-PAGE_ICONS = {"Overview": " ", "Employee Onboarding": " ", "Project Management": " ", "Performance Reviews": " ", "Analytics Dashboard": " "}
+PAGES = ["Overview", "Employee Management", "Project Management", "Performance Reviews", "Analytics Dashboard"]
+PAGE_ICONS = {"Overview": " ", "Employee Management": " ", "Project Management": " ", "Performance Reviews": " ", "Analytics Dashboard": " "}
 # PAGE_ICONS = {"Overview": "◈", "Employee Onboarding": "＋", "Project Management": "◆", "Performance Reviews": "✓", "Analytics Dashboard": "◒"}
 
 # @st.cache_data
@@ -48,7 +48,7 @@ def load_local_data() -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     return employees, history, reviews
 
 
-def local_analytics(department_basis: str) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+def local_analytics(department_basis: str, department_name: str | None = None) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame, pd.DataFrame]:
     employees, history, reviews = load_local_data()
     if employees.empty:
         trend = pd.DataFrame({"review_year": [2023, 2024, 2025], "avg_score": [82.4, 85.1, 87.6]})
@@ -70,7 +70,21 @@ def local_analytics(department_basis: str) -> tuple[pd.DataFrame, pd.DataFrame, 
                 "avg_attrition_risk": [24, 38, 29, 34],
             }
         )
-        return trend, top, risk
+        bottlenecks = pd.DataFrame(
+            {
+                "project_id": [1, 2],
+                "project_name": ["Project Alpha", "Project Beta"],
+                "department_name": ["Engineering", "Sales"],
+                "budget": [100000, 50000],
+                "assigned_employees": [1, 2],
+                "total_allocation_pct": [50, 150],
+            }
+        )
+        if department_name and department_name != "All departments":
+            top = top[top["department_name"] == department_name]
+            risk = risk[risk["department_name"] == department_name]
+            bottlenecks = bottlenecks[bottlenecks["department_name"] == department_name]
+        return trend, top, risk, bottlenecks
 
     if department_basis == "review":
         department_versions = history[["employee_id", "department_name", "start_date", "end_date"]]
@@ -85,6 +99,9 @@ def local_analytics(department_basis: str) -> tuple[pd.DataFrame, pd.DataFrame, 
 
     identity = employees[["employee_id", "first_name", "last_name"]]
     review_rows = review_rows.merge(identity, on="employee_id", how="left", validate="many_to_one")
+    
+    if department_name and department_name != "All departments":
+        review_rows = review_rows[review_rows["department_name"] == department_name]
     trend = (
         review_rows.assign(review_year=review_rows["review_date"].dt.year)
         .groupby("review_year", as_index=False)["overall_score"]
@@ -99,6 +116,9 @@ def local_analytics(department_basis: str) -> tuple[pd.DataFrame, pd.DataFrame, 
     top = top[top["department_rank"] <= 5].sort_values(["department_name", "department_rank"])
 
     current_history = history[history["is_current"].astype(bool)]
+    if department_name and department_name != "All departments":
+        current_history = current_history[current_history["department_name"] == department_name]
+        
     risk = (
         current_history.groupby("department_name", as_index=False)
         .agg(
@@ -108,7 +128,8 @@ def local_analytics(department_basis: str) -> tuple[pd.DataFrame, pd.DataFrame, 
         )
         .sort_values("avg_attrition_risk", ascending=False)
     )
-    return trend, top, risk
+    bottlenecks = pd.DataFrame() # Local CSVs don't have projects yet
+    return trend, top, risk, bottlenecks
 
 
 def get_department_choices() -> list[dict]:
@@ -193,39 +214,150 @@ def render_overview() -> None:
         st.info("Generate the included sample data with `python -m src.ETL.synthesizer` to preview workforce metrics.")
 
 
-def render_onboarding() -> None:
-    page_header("Employee <span class='gradient-text'>onboarding</span>", "Create a workforce record and place it in the warehouse")
+def render_employees() -> None:
+    page_header("Employee <span class='gradient-text'>management</span>", "Create and manage workforce records")
     departments = get_department_choices()
-    with st.container(border=True):
-        section_title("New employee profile")
-        with st.form("employee_form"):
-            first_col, last_col = st.columns(2)
-            with first_col:
-                first_name = st.text_input("First name")
-                email = st.text_input("Work email")
-            with last_col:
-                last_name = st.text_input("Last name")
-                job_title = st.text_input("Job title")
-            department_col, salary_col = st.columns(2)
-            with department_col:
-                department_id = render_department_field(departments, "employee_department")
-            with salary_col:
-                salary = st.number_input("Annual salary", min_value=1_000.0, step=1_000.0, format="%.2f")
-            st.caption("Employee details are validated before they are written to OLTP and the current warehouse dimension.")
-            submitted = st.form_submit_button("Add employee", type="primary", use_container_width=True)
-    if submitted:
-        employee = Employee(first_name=first_name, last_name=last_name, email=email, department_id=department_id, job_title=job_title, salary=float(salary))
-        try:
-            employee_id = EmployeeManager().create_employee(employee)
-            render_form_message(f"Employee {employee_id} added. The current employee record was created.", True)
-        except Exception as exc:
-            render_form_message(f"Employee could not be added: {exc}", False)
+    
+    create_tab, manage_tab = st.tabs(["Onboard employee", "Manage employee"])
+    
+    with create_tab:
+        with st.container(border=True):
+            section_title("New employee profile")
+            with st.form("employee_form"):
+                first_col, last_col = st.columns(2)
+                with first_col:
+                    first_name = st.text_input("First name")
+                    email = st.text_input("Work email")
+                with last_col:
+                    last_name = st.text_input("Last name")
+                    job_title = st.text_input("Job title")
+                department_col, salary_col = st.columns(2)
+                with department_col:
+                    department_id = render_department_field(departments, "employee_department")
+                with salary_col:
+                    salary = st.number_input("Annual salary", min_value=1_000.0, step=1_000.0, format="%.2f")
+                st.caption("Employee details are validated before they are written to OLTP and the current warehouse dimension.")
+                submitted = st.form_submit_button("Add employee", type="primary", use_container_width=True)
+        if submitted:
+            employee = Employee(first_name=first_name, last_name=last_name, email=email, department_id=department_id, job_title=job_title, salary=float(salary))
+            try:
+                employee_id = EmployeeManager().create_employee(employee)
+                render_form_message(f"Employee {employee_id} added. The current employee record was created.", True)
+            except Exception as exc:
+                render_form_message(f"Employee could not be added: {exc}", False)
+                
+    with manage_tab:
+        with st.container(border=True):
+            section_title("Find employee")
+            search_col, _ = st.columns([1, 2])
+            with search_col:
+                search_id = st.number_input("Employee ID", min_value=1, step=1, key="search_emp_id")
+                search_btn = st.button("Search")
+        
+        if search_btn:
+            try:
+                emp = EmployeeManager().get_employee(search_id)
+                if emp:
+                    st.session_state["selected_employee"] = emp
+                else:
+                    st.session_state.pop("selected_employee", None)
+                    st.error("Employee not found.")
+            except Exception as exc:
+                 st.error(f"Error fetching employee: {exc}")
+                 
+        if "selected_employee" in st.session_state:
+            emp = st.session_state["selected_employee"]
+            if emp.get("status") == "inactive":
+                st.warning("This employee record is marked as inactive.")
+                
+            with st.container(border=True):
+                section_title(f"Update: {emp['first_name']} {emp['last_name']}")
+                with st.form("update_emp_form"):
+                    st.write(f"**Email:** {emp['email']}")
+                    st.write(f"**Title:** {emp['job_title']}")
+                    
+                    upd_dept_col, upd_sal_col = st.columns(2)
+                    with upd_dept_col:
+                        current_dept_id = emp["department_id"]
+                        dept_names = [d["department_name"] for d in departments]
+                        dept_ids = [d["department_id"] for d in departments]
+                        
+                        try:
+                            idx = dept_ids.index(current_dept_id)
+                        except ValueError:
+                            idx = 0
+                        
+                        if departments:
+                            selected_dept_name = st.selectbox("Department", dept_names, index=idx, key="upd_dept")
+                            new_dept_id = dept_ids[dept_names.index(selected_dept_name)]
+                        else:
+                            new_dept_id = st.number_input("Department ID", min_value=1, value=int(current_dept_id), step=1, key="upd_dept_id")
+                            
+                    with upd_sal_col:
+                        new_salary = st.number_input("Annual salary", min_value=1_000.0, value=float(emp["salary"]), step=1_000.0, format="%.2f", key="upd_sal")
+                        
+                    st.caption("Changes to Department or Salary will trigger an SCD Type 2 update.")
+                    update_btn = st.form_submit_button("Save changes", type="primary", use_container_width=True)
+                    
+            if update_btn:
+                try:
+                    manager = EmployeeManager()
+                    changes_made = False
+                    if int(new_dept_id) != int(emp["department_id"]):
+                        manager.update_department(emp["employee_id"], int(new_dept_id))
+                        changes_made = True
+                    if float(new_salary) != float(emp["salary"]):
+                        manager.update_salary(emp["employee_id"], float(new_salary))
+                        changes_made = True
+                        
+                    if changes_made:
+                        st.success("Employee updated successfully! (SCD2 changes applied)")
+                        st.session_state["selected_employee"] = manager.get_employee(emp["employee_id"])
+                        st.rerun()
+                    else:
+                        st.info("No changes to save.")
+                except Exception as exc:
+                    st.error(f"Failed to update employee: {exc}")
+                    
+            with st.container(border=True):
+                section_title("Deactivate employee")
+                st.warning(
+                    "This marks the employee as inactive. It does not permanently delete "
+                    "the employee, performance reviews, project assignments, or historical versions."
+                )
+
+                confirm_deactivation = st.checkbox(
+                    f"I confirm that I want to deactivate {emp['first_name']} "
+                    f"{emp['last_name']} (ID: {emp['employee_id']}).",
+                    key=f"confirm_deactivate_{emp['employee_id']}",
+                )
+
+                if st.button(
+                    "Deactivate employee",
+                    type="primary",
+                    key=f"deactivate_employee_{emp['employee_id']}",
+                    disabled=not confirm_deactivation,
+                    use_container_width=True,
+                ):
+                    try:
+                        EmployeeManager().delete_employee(emp["employee_id"])
+                        st.success(
+                            f"{emp['first_name']} {emp['last_name']} has been deactivated. "
+                            "Historical records have been preserved."
+                        )
+                        st.session_state.pop("selected_employee", None)
+                        st.rerun()
+                    except Exception as exc:
+                        st.error(f"Failed to deactivate employee: {exc}")
+
+                    
+            
 
 
 def render_projects() -> None:
     page_header("Project <span class='gradient-text'>management</span>", "Create initiatives and balance employee allocations")
     departments = get_department_choices()
-    create_tab, assign_tab = st.tabs(["Create project", "Assign employee"])
+    create_tab, assign_tab, manage_tab = st.tabs(["Create project", "Assign employee", "Manage projects"])
     with create_tab:
         with st.container(border=True):
             section_title("Project brief")
@@ -262,60 +394,186 @@ def render_projects() -> None:
             except Exception as exc:
                 render_form_message(f"Allocation could not be saved: {exc}", False)
 
+    with manage_tab:
+        with st.container(border=True):
+            section_title("Find project")
+            search_col, _ = st.columns([1, 2])
+            with search_col:
+                search_pid = st.number_input("Project ID", min_value=1, step=1, key="search_proj_id")
+                search_pbtn = st.button("Search Project")
+                
+        if search_pbtn:
+            try:
+                proj = ProjectManager().get_project(search_pid)
+                if proj:
+                    st.session_state["selected_project"] = proj
+                else:
+                    st.session_state.pop("selected_project", None)
+                    st.error("Project not found.")
+            except Exception as exc:
+                st.error(f"Error fetching project: {exc}")
+                
+        if "selected_project" in st.session_state:
+            proj = st.session_state["selected_project"]
+            with st.container(border=True):
+                section_title(f"Update Project: {proj['project_name']}")
+                with st.form("update_proj_form"):
+                    new_name = st.text_input("Project Name", value=proj["project_name"])
+                    new_budget = st.number_input("Budget", min_value=0.0, value=float(proj["budget"]), step=5000.0)
+                    
+                    statuses = ["planned", "active", "completed", "on_hold"]
+                    current_status = proj["status"]
+                    idx = statuses.index(current_status) if current_status in statuses else 0
+                    new_status = st.selectbox("Status", statuses, index=idx)
+                    
+                    update_btn = st.form_submit_button("Save changes", type="primary", use_container_width=True)
+                    
+            if update_btn:
+                try:
+                    ProjectManager().update_project(proj["project_id"], new_name, float(new_budget), new_status)
+                    st.success("Project updated successfully!")
+                    st.session_state["selected_project"] = ProjectManager().get_project(proj["project_id"])
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"Failed to update project: {exc}")
+                    
+            with st.container(border=True):
+                section_title("Danger zone")
+                if st.button("Delete project", type="primary", key="del_proj"):
+                    try:
+                        ProjectManager().delete_project(proj["project_id"])
+                        st.success("Project deleted.")
+                        st.session_state.pop("selected_project", None)
+                        st.rerun()
+                    except Exception as exc:
+                        st.error(f"Failed to delete project: {exc}")
 
 def render_reviews() -> None:
     page_header("Performance <span class='gradient-text'>reviews</span>", "Capture a clear, consistent view of employee performance")
-    with st.container(border=True):
-        section_title("Review details")
-        with st.form("review_form"):
-            identity_col, date_col = st.columns(2)
-            with identity_col:
-                employee_id = st.number_input("Employee ID", min_value=1, step=1)
-            with date_col:
-                review_date = st.date_input("Review date")
-            score = st.slider("Overall score", min_value=0.0, max_value=100.0, value=80.0, step=0.5)
-            band, band_color = score_band(score)
-            st.markdown(f'<span class="score-band" style="color:{band_color}; border-color:{band_color}55">●&nbsp; {band} · {score:.1f}/100</span>', unsafe_allow_html=True)
-            rating = st.selectbox("Rating", ["Exceeds Expectations", "Strong", "Meets Expectations", "Needs Improvement"])
-            comments = st.text_area("Manager comments", height=130)
-            submit_review = st.form_submit_button("Save review", type="primary", use_container_width=True)
-    if submit_review:
-        try:
-            review_id = ReviewManager().create_review(Review(employee_id=int(employee_id), review_date=review_date, overall_score=float(score), rating=rating, comments=comments))
-            render_form_message(f"Review {review_id} saved. Run the warehouse ETL to refresh analytics.", True)
-        except Exception as exc:
-            render_form_message(f"Review could not be saved: {exc}", False)
+    create_tab, manage_tab = st.tabs(["Create review", "Manage reviews"])
+    
+    with create_tab:
+        with st.container(border=True):
+            section_title("Review details")
+            with st.form("review_form"):
+                identity_col, date_col = st.columns(2)
+                with identity_col:
+                    employee_id = st.number_input("Employee ID", min_value=1, step=1)
+                with date_col:
+                    review_date = st.date_input("Review date")
+                score = st.slider("Overall score", min_value=0.0, max_value=100.0, value=80.0, step=0.5)
+                band, band_color = score_band(score)
+                st.markdown(f'<span class="score-band" style="color:{band_color}; border-color:{band_color}55">●&nbsp; {band} · {score:.1f}/100</span>', unsafe_allow_html=True)
+                rating = st.selectbox("Rating", ["Exceeds Expectations", "Strong", "Meets Expectations", "Needs Improvement"])
+                comments = st.text_area("Manager comments", height=130)
+                submit_review = st.form_submit_button("Save review", type="primary", use_container_width=True)
+        if submit_review:
+            try:
+                review_id = ReviewManager().create_review(Review(employee_id=int(employee_id), review_date=review_date, overall_score=float(score), rating=rating, comments=comments))
+                render_form_message(f"Review {review_id} saved. Run the warehouse ETL to refresh analytics.", True)
+            except Exception as exc:
+                render_form_message(f"Review could not be saved: {exc}", False)
 
+    with manage_tab:
+        with st.container(border=True):
+            section_title("Find review")
+            search_col, _ = st.columns([1, 2])
+            with search_col:
+                search_rid = st.number_input("Review ID", min_value=1, step=1, key="search_rev_id")
+                search_rbtn = st.button("Search Review")
+                
+        if search_rbtn:
+            try:
+                rev = ReviewManager().get_review(search_rid)
+                if rev:
+                    st.session_state["selected_review"] = rev
+                else:
+                    st.session_state.pop("selected_review", None)
+                    st.error("Review not found.")
+            except Exception as exc:
+                st.error(f"Error fetching review: {exc}")
+                
+        if "selected_review" in st.session_state:
+            rev = st.session_state["selected_review"]
+            with st.container(border=True):
+                section_title(f"Update Review {rev['review_id']} (Emp: {rev['employee_id']})")
+                with st.form("update_rev_form"):
+                    new_score = st.slider("Overall score", min_value=0.0, max_value=100.0, value=float(rev["overall_score"]), step=0.5, key="upd_rev_score")
+                    ratings = ["Exceeds Expectations", "Strong", "Meets Expectations", "Needs Improvement"]
+                    current_rating = rev["rating"]
+                    idx = ratings.index(current_rating) if current_rating in ratings else 0
+                    new_rating = st.selectbox("Rating", ratings, index=idx, key="upd_rev_rating")
+                    
+                    new_comments = st.text_area("Comments", value=rev.get("comments", ""), key="upd_rev_comments")
+                    update_btn = st.form_submit_button("Save changes", type="primary", use_container_width=True)
+                    
+            if update_btn:
+                try:
+                    ReviewManager().update_review(rev["review_id"], float(new_score), new_rating, new_comments)
+                    st.success("Review updated successfully!")
+                    st.session_state["selected_review"] = ReviewManager().get_review(rev["review_id"])
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"Failed to update review: {exc}")
+                    
+            with st.container(border=True):
+                section_title("Danger zone")
+                if st.button("Delete review", type="primary", key="del_rev"):
+                    try:
+                        ReviewManager().delete_review(rev["review_id"])
+                        st.success("Review deleted.")
+                        st.session_state.pop("selected_review", None)
+                        st.rerun()
+                    except Exception as exc:
+                        st.error(f"Failed to delete review: {exc}")
 
 def render_analytics() -> None:
     page_header("Performance <span class='gradient-text'>analytics</span>", "Read workforce momentum, high performers, and risk at a glance")
-    department_label = st.radio(
-        "Attribute reviews to",
-        ["Department at time of review", "Current department"],
-        horizontal=True,
-        help="Historical attribution uses the employee dimension version effective on the review date.",
-    )
+    
+    ctrl_col1, ctrl_col2 = st.columns([1, 1])
+    with ctrl_col1:
+        department_label = st.radio(
+            "Attribute reviews to",
+            ["Department at time of review", "Current department"],
+            horizontal=True,
+            help="Historical attribution uses the employee dimension version effective on the review date.",
+        )
+    
     department_basis = "review" if department_label == "Department at time of review" else "current"
+    
+    departments_list = get_department_choices()
+    dept_names = ["All departments"] + sorted([d["department_name"] for d in departments_list])
+    
+    with ctrl_col2:
+        selected_department = st.selectbox("Filter dashboard by department", dept_names)
+        
     analytics = AnalyticsManager()
     try:
-        trend = pd.DataFrame(analytics.get_performance_trends())
-    except Exception:
+        trend = pd.DataFrame(analytics.get_performance_trends(department_basis, selected_department))
+    except Exception as e:
+        st.error(f"Trend error: {e}")
         trend = pd.DataFrame()
     try:
-        top = pd.DataFrame(analytics.get_top_performers(department_basis))
-    except Exception:
+        top = pd.DataFrame(analytics.get_top_performers(department_basis, selected_department))
+    except Exception as e:
+        st.error(f"Top error: {e}")
         top = pd.DataFrame()
     try:
-        risk = pd.DataFrame(analytics.get_attrition_risk())
-    except Exception:
+        risk = pd.DataFrame(analytics.get_attrition_risk(selected_department))
+    except Exception as e:
+        st.error(f"Risk error: {e}")
         risk = pd.DataFrame()
-    local_fallback = trend.empty or top.empty or risk.empty
+    try:
+        bottlenecks = pd.DataFrame(analytics.get_project_bottlenecks(selected_department))
+    except Exception as e:
+        st.error(f"Bottlenecks error: {e}")
+        bottlenecks = pd.DataFrame()
+        
+    # Show info pill if any query threw an exception (causing the df to be explicitly empty in our except blocks)
+    # but don't fallback to local CSV data just because a department has no records in a specific table.
+    local_fallback = trend.empty and top.empty and risk.empty and bottlenecks.empty
     if local_fallback:
-        local_trend, local_top, local_risk = local_analytics(department_basis)
-        trend = trend if not trend.empty else local_trend
-        top = top if not top.empty else local_top
-        risk = risk if not risk.empty else local_risk
-        info_pill("Showing local synthetic analytics for any view not available from MySQL")
+        info_pill("Showing synthetic analytics for any view not available from MySQL")
 
     latest_score = float(trend.iloc[-1]["avg_score"]) if not trend.empty else 0
     year_change = float(trend.iloc[-1]["avg_score"] - trend.iloc[-2]["avg_score"]) if len(trend) > 1 else 0
@@ -338,14 +596,13 @@ def render_analytics() -> None:
             fig = px.line(trend, x="review_year", y="avg_score", markers=True, labels={"review_year": "Year", "avg_score": "Average review score"})
             fig.update_traces(line={"color": COLORS["pink"], "width": 3}, marker={"color": COLORS["soft_pink"], "size": 9}, fill="tozeroy", fillcolor="rgba(185,58,150,.16)", hovertemplate="Year %{x}<br>Average review score %{y:.1f}<extra></extra>")
             padding = max(1, (float(trend["avg_score"].max()) - float(trend["avg_score"].min())) * 0.35)
-            fig.update_layout(xaxis={"dtick": 1, "tickformat": "d", "title": "Year"}, yaxis={"range": [trend["avg_score"].min() - padding, trend["avg_score"].max() + padding], "title": "Average review score"})
+            y_min = float(trend["avg_score"].min()) - padding
+            y_max = float(trend["avg_score"].max()) + padding
+            fig.update_layout(xaxis={"dtick": 1, "tickformat": "d", "title": "Year"}, yaxis={"range": [y_min, y_max], "title": "Average review score"})
             st.plotly_chart(style_fig(fig, 365), use_container_width=True, config={"displayModeBar": False})
             st.caption(f"Review scores moved {year_change:+.1f} points in the latest year.")
     if not top.empty:
-        top = top.copy()
-        departments = ["All departments"] + sorted(top["department_name"].dropna().unique().tolist())
-        selected_department = chart_columns[1].selectbox("Filter top performers", departments)
-        filtered_top = top if selected_department == "All departments" else top[top["department_name"] == selected_department]
+        filtered_top = top.copy()
         filtered_top = filtered_top.sort_values("overall_score", ascending=True).tail(10)
         filtered_top["employee_name"] = filtered_top["first_name"] + " " + filtered_top["last_name"]
         with chart_columns[1].container(border=True):
@@ -372,6 +629,37 @@ def render_analytics() -> None:
         with st.container(border=True):
             section_title("Performance roster")
             st.dataframe(display_top.sort_values("Average score", ascending=False), hide_index=True, use_container_width=True)
+            
+    if not bottlenecks.empty:
+        with st.container(border=True):
+            section_title("Project bottlenecks")
+            
+            # Interactive Chart for Bottlenecks
+            bottlenecks["budget"] = pd.to_numeric(bottlenecks["budget"], errors="coerce").fillna(0)
+            fig = px.scatter(
+                bottlenecks, 
+                x="assigned_employees", 
+                y="total_allocation_pct", 
+                color="department_name",
+                size="budget",
+                hover_name="project_name",
+                hover_data={"project_id": True, "department_name": False, "budget": ":$,.0f", "assigned_employees": True, "total_allocation_pct": True},
+                labels={
+                    "assigned_employees": "Assigned Employees", 
+                    "total_allocation_pct": "Total Allocation %", 
+                    "department_name": "Department",
+                    "budget": "Budget"
+                },
+                color_discrete_sequence=COLOURWAY,
+                title="Resource Allocation by Project"
+            )
+            fig.update_layout(xaxis_title="Assigned Employees", yaxis_title="Total Allocation % (across all employees)", showlegend=True)
+            st.plotly_chart(style_fig(fig, 390), use_container_width=True, config={"displayModeBar": False})
+            st.caption("Active projects with low total allocation or headcount indicate potential resource bottlenecks. Bubble size corresponds to project budget.")
+
+            display_bottlenecks = bottlenecks.copy()
+            display_bottlenecks.columns = ["Project ID", "Project Name", "Department", "Budget", "Assigned Employees", "Total Allocation %"]
+            st.dataframe(display_bottlenecks, hide_index=True, use_container_width=True)
 
 
 st.sidebar.markdown('<div class="brand-mark"><span>V4C</span>.ai</div>', unsafe_allow_html=True)
@@ -380,8 +668,8 @@ page = page.split("  ", 1)[1].strip()
 
 if page == "Overview":
     render_overview()
-elif page == "Employee Onboarding":
-    render_onboarding()
+elif page == "Employee Management":
+    render_employees()
 elif page == "Project Management":
     render_projects()
 elif page == "Performance Reviews":

@@ -13,6 +13,7 @@ src/
 	managers.py              Employee, project, review, and analytics managers
 	models.py                Validated OOP entities
 	run_etl.py               CSV-to-MySQL ETL command
+	run_schema.py            Executes schema.sql to setup tables and stored procedures
 	streamlit_app.py         Web application and analytics dashboard
 tests/                     Focused SCD2 and dashboard-query tests
 ```
@@ -45,10 +46,10 @@ Generation is reproducible with `--seed`; use `--output-dir` to write elsewhere.
 
 ## Create and load the database
 
-Run `src/database/schema.sql` in MySQL Workbench or from a MySQL client:
+Run `src/database/schema.sql` in MySQL Workbench, or simply use the provided Python script:
 
 ```bash
-mysql -u root -p < src/database/schema.sql
+python run_schema.py
 ```
 
 Then load the generated CSVs into OLTP and the warehouse:
@@ -57,7 +58,7 @@ Then load the generated CSVs into OLTP and the warehouse:
 python -m src.run_etl
 ```
 
-The ETL batches large CSVs, maps department business IDs to warehouse surrogate keys, creates date/project dimensions, ranks assignments with a window function, and resolves each fact to the `dim_employee` version effective on its review date. Employee department/salary changes close the prior dimension row and insert a current row in one transaction.
+The ETL script calls custom **Stored Procedures** (`sp_etl_dim_date`, `sp_etl_dim_project`, `sp_etl_fact_reviews`) residing in your MySQL schema to perform the heavy transformation. These procedures batch large CSVs, map department business IDs to warehouse surrogate keys, create date/project dimensions, rank assignments with a window function (`ROW_NUMBER()`), and resolve each fact to the `dim_employee` version effective on its review date. Employee department/salary changes close the prior dimension row and insert a current row in one transaction.
 
 ## Run the application
 
@@ -65,7 +66,11 @@ The ETL batches large CSVs, maps department business IDs to warehouse surrogate 
 streamlit run src/streamlit_app.py
 ```
 
-The app provides employee onboarding, project creation and assignment, performance-review entry, and analytics. With MySQL available, forms write to OLTP and dashboards query the warehouse. If the warehouse is unavailable, analytics use the local generated CSVs so the dashboards and department toggle remain demonstrable; database write forms still require a configured MySQL server.
+The app provides a comprehensive UI including:
+- **Full CRUD Management**: Search, Update, and Soft Delete capabilities across Employees, Projects, and Performance Reviews. Updating an employee's department or salary automatically triggers an SCD Type 2 tracking update in the backend warehouse.
+- **Analytics Dashboard**: Interactive Plotly charts analyzing year-over-year performance trends, top-performing employees by department, attrition risk, and **Project Bottlenecks** (active projects suffering from resource shortages).
+
+If the warehouse is unavailable, analytics use the local generated CSVs so the dashboards and department toggle remain demonstrable; database write forms still require a configured MySQL server.
 
 ### Department attribution toggle
 
