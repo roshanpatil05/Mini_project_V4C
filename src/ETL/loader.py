@@ -181,8 +181,9 @@ class DataWarehouseLoader(DatabaseConnection):
 					int(row.employee_id), row.first_name, row.last_name, row.email,
 					self._department_keys[self._department_ids[row.department_name]], row.job_title,
 					row.hire_date.date(), float(row.salary), int(row.performance_score),
-					int(row.attrition_risk), row.start_date.date(),
-					row.end_date.date() if pd.notna(row.end_date) else None,
+					int(row.attrition_risk),
+					row.start_date.to_pydatetime() if hasattr(row.start_date, "to_pydatetime") else row.start_date,
+					row.end_date.to_pydatetime() if pd.notna(row.end_date) and hasattr(row.end_date, "to_pydatetime") else (row.end_date if pd.notna(row.end_date) else None),
 					bool(row.is_current),
 				)
 				for row in batch.itertuples(index=False)

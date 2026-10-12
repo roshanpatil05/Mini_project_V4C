@@ -12,6 +12,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from src.exceptions import user_facing_error
 from src.managers import AnalyticsManager, EmployeeManager, ProjectManager, ReviewManager
 from src.models import Employee, Project, Review
 from src.ui.theme import (
@@ -244,7 +245,7 @@ def render_employees() -> None:
                 employee_id = EmployeeManager().create_employee(employee)
                 render_form_message(f"Employee {employee_id} added. The current employee record was created.", True)
             except Exception as exc:
-                render_form_message(f"Employee could not be added: {exc}", False)
+                render_form_message(f"Employee could not be added: {user_facing_error(exc)}", False)
                 
     with manage_tab:
         with st.container(border=True):
@@ -263,7 +264,7 @@ def render_employees() -> None:
                     st.session_state.pop("selected_employee", None)
                     st.error("Employee not found.")
             except Exception as exc:
-                 st.error(f"Error fetching employee: {exc}")
+                 st.error(f"Error fetching employee: {user_facing_error(exc)}")
                  
         if "selected_employee" in st.session_state:
             emp = st.session_state["selected_employee"]
@@ -317,7 +318,7 @@ def render_employees() -> None:
                     else:
                         st.info("No changes to save.")
                 except Exception as exc:
-                    st.error(f"Failed to update employee: {exc}")
+                    st.error(f"Failed to update employee: {user_facing_error(exc)}")
                     
             with st.container(border=True):
                 section_title("Deactivate employee")
@@ -348,7 +349,7 @@ def render_employees() -> None:
                         st.session_state.pop("selected_employee", None)
                         st.rerun()
                     except Exception as exc:
-                        st.error(f"Failed to deactivate employee: {exc}")
+                        st.error(f"Failed to deactivate employee: {user_facing_error(exc)}")
 
                     
             
@@ -374,7 +375,7 @@ def render_projects() -> None:
                 project_id = ProjectManager().create_project(Project(project_name=project_name, department_id=department_id, budget=float(budget)))
                 render_form_message(f"Project {project_id} created.", True)
             except Exception as exc:
-                render_form_message(f"Project could not be created: {exc}", False)
+                render_form_message(f"Project could not be created: {user_facing_error(exc)}", False)
     with assign_tab:
         with st.container(border=True):
             section_title("Allocation details")
@@ -392,7 +393,7 @@ def render_projects() -> None:
                 ProjectManager().assign_employee(int(employee_id), int(project_id), float(allocation))
                 render_form_message("Project allocation saved.", True)
             except Exception as exc:
-                render_form_message(f"Allocation could not be saved: {exc}", False)
+                render_form_message(f"Allocation could not be saved: {user_facing_error(exc)}", False)
 
     with manage_tab:
         with st.container(border=True):
@@ -411,7 +412,7 @@ def render_projects() -> None:
                     st.session_state.pop("selected_project", None)
                     st.error("Project not found.")
             except Exception as exc:
-                st.error(f"Error fetching project: {exc}")
+                st.error(f"Error fetching project: {user_facing_error(exc)}")
                 
         if "selected_project" in st.session_state:
             proj = st.session_state["selected_project"]
@@ -435,7 +436,7 @@ def render_projects() -> None:
                     st.session_state["selected_project"] = ProjectManager().get_project(proj["project_id"])
                     st.rerun()
                 except Exception as exc:
-                    st.error(f"Failed to update project: {exc}")
+                    st.error(f"Failed to update project: {user_facing_error(exc)}")
                     
             with st.container(border=True):
                 section_title("Danger zone")
@@ -446,7 +447,7 @@ def render_projects() -> None:
                         st.session_state.pop("selected_project", None)
                         st.rerun()
                     except Exception as exc:
-                        st.error(f"Failed to delete project: {exc}")
+                        st.error(f"Failed to delete project: {user_facing_error(exc)}")
 
 def render_reviews() -> None:
     page_header("Performance <span class='gradient-text'>reviews</span>", "Capture a clear, consistent view of employee performance")
@@ -472,7 +473,7 @@ def render_reviews() -> None:
                 review_id = ReviewManager().create_review(Review(employee_id=int(employee_id), review_date=review_date, overall_score=float(score), rating=rating, comments=comments))
                 render_form_message(f"Review {review_id} saved. Run the warehouse ETL to refresh analytics.", True)
             except Exception as exc:
-                render_form_message(f"Review could not be saved: {exc}", False)
+                render_form_message(f"Review could not be saved: {user_facing_error(exc)}", False)
 
     with manage_tab:
         with st.container(border=True):
@@ -491,7 +492,7 @@ def render_reviews() -> None:
                     st.session_state.pop("selected_review", None)
                     st.error("Review not found.")
             except Exception as exc:
-                st.error(f"Error fetching review: {exc}")
+                st.error(f"Error fetching review: {user_facing_error(exc)}")
                 
         if "selected_review" in st.session_state:
             rev = st.session_state["selected_review"]
@@ -514,7 +515,7 @@ def render_reviews() -> None:
                     st.session_state["selected_review"] = ReviewManager().get_review(rev["review_id"])
                     st.rerun()
                 except Exception as exc:
-                    st.error(f"Failed to update review: {exc}")
+                    st.error(f"Failed to update review: {user_facing_error(exc)}")
                     
             with st.container(border=True):
                 section_title("Danger zone")
@@ -525,7 +526,7 @@ def render_reviews() -> None:
                         st.session_state.pop("selected_review", None)
                         st.rerun()
                     except Exception as exc:
-                        st.error(f"Failed to delete review: {exc}")
+                        st.error(f"Failed to delete review: {user_facing_error(exc)}")
 
 def render_analytics() -> None:
     page_header("Performance <span class='gradient-text'>analytics</span>", "Read workforce momentum, high performers, and risk at a glance")
@@ -541,22 +542,22 @@ def render_analytics() -> None:
     try:
         trend = pd.DataFrame(analytics.get_performance_trends(department_basis, selected_department))
     except Exception as e:
-        st.error(f"Trend error: {e}")
+        st.error(f"Trend error: {user_facing_error(e)}")
         trend = pd.DataFrame()
     try:
         top = pd.DataFrame(analytics.get_top_performers(department_basis, selected_department))
     except Exception as e:
-        st.error(f"Top error: {e}")
+        st.error(f"Top error: {user_facing_error(e)}")
         top = pd.DataFrame()
     try:
         risk = pd.DataFrame(analytics.get_attrition_risk(selected_department))
     except Exception as e:
-        st.error(f"Risk error: {e}")
+        st.error(f"Risk error: {user_facing_error(e)}")
         risk = pd.DataFrame()
     try:
         bottlenecks = pd.DataFrame(analytics.get_project_bottlenecks(selected_department))
     except Exception as e:
-        st.error(f"Bottlenecks error: {e}")
+        st.error(f"Bottlenecks error: {user_facing_error(e)}")
         bottlenecks = pd.DataFrame()
         
     # Show info pill if any query threw an exception (causing the df to be explicitly empty in our except blocks)

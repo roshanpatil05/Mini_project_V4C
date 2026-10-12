@@ -57,7 +57,7 @@ class EmployeeManager(DatabaseConnection):
                 (
                     employee.employee_id, employee.first_name, employee.last_name, employee.email,
                     department["department_key"], employee.job_title, employee.hire_date or date.today(),
-                    employee.salary, date.today(),
+                    employee.salary, datetime.now(),
                 ),
             )
             connection.commit()
@@ -94,6 +94,8 @@ class EmployeeManager(DatabaseConnection):
         department_id: int | None = None,
         salary: float | None = None,
     ) -> None:
+        if employee_id < 1:
+            raise ValidationError("Employee ID must be a positive integer.")
         connection = self.get_connection()
         cursor = connection.cursor()
         effective_time = datetime.now()
@@ -105,6 +107,8 @@ class EmployeeManager(DatabaseConnection):
             employee = cursor.fetchone()
             if employee is None:
                 raise RecordNotFoundError(f"Employee {employee_id} does not exist.")
+            if employee["status"] != "active":
+                raise ValidationError(f"Employee {employee_id} is inactive and cannot be updated.")
             next_department_id = department_id if department_id is not None else employee["department_id"]
             next_salary = salary if salary is not None else employee["salary"]
             cursor.execute(

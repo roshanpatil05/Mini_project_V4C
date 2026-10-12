@@ -123,10 +123,16 @@ class ExceptionHandlingTests(unittest.TestCase):
         with self.assertRaises(ValidationError):
             rm.update_review(1, 120.0, "Strong", "Good")
 
-    def test_review_manager_update_invalid_rating_rejected(self):
-        rm = ReviewManager()
+    def test_employee_manager_update_invalid_inputs(self):
+        em = EmployeeManager()
         with self.assertRaises(ValidationError):
-            rm.update_review(1, 85.0, "Superb!", "Good")
+            em.update_salary(1, -500.0)
+        with self.assertRaises(ValidationError):
+            em.update_salary(1, 0.0)
+        with self.assertRaises(ValidationError):
+            em.update_department(1, 0)
+        with self.assertRaises(ValidationError):
+            em.update_department(-1, 2)
 
 
 if __name__ == "__main__":
