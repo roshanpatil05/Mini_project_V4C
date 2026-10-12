@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date
 
+from src.exceptions import ValidationError
+
 
 @dataclass
 class Employee:
@@ -19,11 +21,11 @@ class Employee:
 
     def validate(self) -> None:
         if not self.first_name.strip() or not self.last_name.strip():
-            raise ValueError("Employee name is required.")
+            raise ValidationError("Employee name is required.")
         if "@" not in self.email:
-            raise ValueError("Enter a valid email address.")
+            raise ValidationError("Enter a valid email address.")
         if self.department_id < 1 or self.salary <= 0:
-            raise ValueError("Department and salary must be valid positive values.")
+            raise ValidationError("Department and salary must be valid positive values.")
 
 
 @dataclass
@@ -38,9 +40,9 @@ class Project:
 
     def validate(self) -> None:
         if not self.project_name.strip():
-            raise ValueError("Project name is required.")
+            raise ValidationError("Project name is required.")
         if self.department_id < 1 or self.budget < 0:
-            raise ValueError("Department must be positive and budget cannot be negative.")
+            raise ValidationError("Department must be positive and budget cannot be negative.")
 
 
 @dataclass
@@ -54,6 +56,7 @@ class Review:
 
     def validate(self) -> None:
         if self.employee_id < 1:
-            raise ValueError("Employee ID is required.")
+            raise ValidationError("Employee ID is required.")
         if not 0 <= self.overall_score <= 100:
-            raise ValueError("Review score must be between 0 and 100.")
+            raise ValidationError("Review score must be between 0 and 100.")
+

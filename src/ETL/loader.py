@@ -23,35 +23,35 @@ class DataWarehouseLoader(DatabaseConnection):
 		project_path: str | Path | None = None,
 		assignment_path: str | Path | None = None,
 	) -> None:
-		print("\n⏳ Extracting CSV files into memory...")
+		print("\nExtracting CSV files into memory.")
 		extractor = CSVExtractor()
 		employees = extractor.extract(employee_path)
 		raw_history = extractor.extract(history_path)
 		versions = DataTransformer.build_employee_history(employees, raw_history)
 		connection = self.get_connection()
 		try:
-			print("⏳ Loading departments...")
+			print("Loading departments.")
 			self._load_departments(connection, employees["department_name"].unique())
 			
 			if project_path is not None:
 				projects = extractor.extract(project_path)
-				print(f"⏳ Loading {len(projects)} projects...")
+				print(f"Loading {len(projects)} projects.")
 				self._load_oltp_projects(connection, projects)
 				
-			print(f"⏳ Loading {len(employees)} employee records...")
+			print(f"Loading {len(employees)} employee records.")
 			self._load_oltp_employees(connection, employees)
 			
 			if assignment_path is not None:
 				assignments = extractor.extract(assignment_path)
-				print(f"⏳ Loading {len(assignments)} project assignments...")
+				print(f"Loading {len(assignments)} project assignments.")
 				self._load_oltp_assignments(connection, assignments)
 				
 			if review_path is not None:
 				reviews = extractor.extract(review_path)
-				print(f"⏳ Loading {len(reviews)} performance reviews...")
+				print(f"Loading {len(reviews)} performance reviews.")
 				self._load_oltp_reviews(connection, reviews)
 				
-			print(f"⏳ Loading {len(versions)} employee SCD2 historical versions...")
+			print(f"Loading {len(versions)} employee SCD2 historical versions.")
 			self._load_employee_versions(connection, versions)
 			connection.commit()
 		except Exception:
@@ -59,9 +59,9 @@ class DataWarehouseLoader(DatabaseConnection):
 			raise
 		
 		if review_path is not None:
-			print("⏳ Triggering Stored Procedures for Data Warehouse facts...")
+			print("Triggering Stored Procedures for Data Warehouse facts...")
 			self.load_review_facts()
-			print("✅ ETL pipeline finished!")
+			print("ETL pipeline finished!")
 
 	def _load_oltp_projects(self, connection, projects: pd.DataFrame) -> None:
 		cursor = connection.cursor()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from threading import RLock
 from typing import Any
 
@@ -8,6 +9,14 @@ import pymysql.cursors
 from pymysql import Error as MySQLError
 
 from src.config.settings import settings
+from src.exceptions import (
+	DatabaseConnectionError,
+	DatabaseError,
+	DatabaseOperationError,
+	map_mysql_error,
+)
+
+logger = logging.getLogger("employee_analytics.database")
 
 
 class DatabaseConnection:
@@ -53,9 +62,19 @@ class DatabaseConnection:
 					)
 				return self._connection
 			except MySQLError as exc:
-				raise RuntimeError(f"Could not connect to MySQL: {exc}") from exc
+				logger.error("Failed to connect to MySQL database: %s", exc, exc_info=True)
+				raise map_mysql_error(exc, operation="connection") from exc
+			except Exception as exc:
+				logger.error("Unexpected error establishing MySQL connection: %s", exc, exc_info=True)
+				raise DatabaseConnectionError(
+					f"Unexpected connection error: {exc}",
+					user_message="Unable to connect to the database. Please verify the database service is running.",
+					original_error=exc,
+				) from exc
 
-	def execute(self, query: str, params: tuple[Any, ...] = (), commit: bool = False):
+	def execute(self, query: str, params: tuple[Any, ...] | list[Any] | None = None, commit: bool = False):
+		if params is None:
+			params = ()
 		connection = self.get_connection()
 		cursor = connection.cursor()
 		try:
@@ -64,25 +83,57 @@ class DatabaseConnection:
 				connection.commit()
 			return cursor
 		except MySQLError as exc:
-			connection.rollback()
-			cursor.close()
-			raise RuntimeError(f"Database operation failed: {exc}") from exc
+			try:
+				connection.rollback()
+			except Exception as rb_exc:
+				logger.warning("Rollback failed after query error: %s", rb_exc)
+			finally:
+				cursor.close()
+			logger.error("Database query execution failed: %s | Query: %s", exc, query, exc_info=True)
+			raise map_mysql_error(exc, operation="query") from exc
+		except Exception as exc:
+			try:
+				connection.rollback()
+			except Exception:
+				pass
+			finally:
+				cursor.close()
+			logger.error("Unexpected error during query execution: %s | Query: %s", exc, query, exc_info=True)
+			raise DatabaseOperationError(
+				f"Unexpected query error: {exc}",
+				user_message="A database error occurred while processing your request. Please try again later.",
+				original_error=exc,
+			) from exc
 
-	def fetch_all(self, query: str, params: tuple[Any, ...] = ()) -> list[dict[str, Any]]:
-		# Commit any open read-transaction so InnoDB gives a fresh snapshot.
-		self.get_connection().commit()
+	def fetch_all(self, query: str, params: tuple[Any, ...] | list[Any] | None = None) -> list[dict[str, Any]]:
+		try:
+			# Commit any open read-transaction so InnoDB gives a fresh snapshot.
+			self.get_connection().commit()
+		except Exception as exc:
+			logger.debug("Non-fatal commit before fetch_all: %s", exc)
+
 		cursor = self.execute(query, params)
 		try:
 			return cursor.fetchall()
+		except MySQLError as exc:
+			logger.error("Error fetching results: %s", exc, exc_info=True)
+			raise map_mysql_error(exc, operation="fetch_all") from exc
 		finally:
 			cursor.close()
 
-	def fetch_one(self, query: str, params: tuple[Any, ...] = ()) -> dict[str, Any] | None:
-		# Commit any open read-transaction so InnoDB gives a fresh snapshot.
-		self.get_connection().commit()
+	def fetch_one(self, query: str, params: tuple[Any, ...] | list[Any] | None = None) -> dict[str, Any] | None:
+		try:
+			# Commit any open read-transaction so InnoDB gives a fresh snapshot.
+			self.get_connection().commit()
+		except Exception as exc:
+			logger.debug("Non-fatal commit before fetch_one: %s", exc)
+
 		cursor = self.execute(query, params)
 		try:
 			return cursor.fetchone()
+		except MySQLError as exc:
+			logger.error("Error fetching single result: %s", exc, exc_info=True)
+			raise map_mysql_error(exc, operation="fetch_one") from exc
 		finally:
 			cursor.close()
 
@@ -91,7 +142,8 @@ class DatabaseConnection:
 			if self._connection is not None:
 				try:
 					self._connection.close()
-				except Exception:
-					pass
+				except Exception as exc:
+					logger.debug("Non-fatal error closing connection: %s", exc)
 			self._connection = None
+
 

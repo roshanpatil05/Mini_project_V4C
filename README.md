@@ -70,16 +70,7 @@ The app provides a comprehensive UI including:
 - **Full CRUD Management**: Search, Update, and Soft Delete capabilities across Employees, Projects, and Performance Reviews. Updating an employee's department or salary automatically triggers an SCD Type 2 tracking update in the backend warehouse.
 - **Analytics Dashboard**: Interactive Plotly charts analyzing year-over-year performance trends, top-performing employees by department, attrition risk, and **Project Bottlenecks** (active projects suffering from resource shortages).
 
-If the warehouse is unavailable, analytics use the local generated CSVs so the dashboards and department toggle remain demonstrable; database write forms still require a configured MySQL server.
-
-### Department attribution toggle
-
-The analytics page offers **Department at time of review** and **Current department**:
-
-- **At time of review** joins each review to the employee dimension version where `start_date <= review_date < end_date` (or the version has no end date). This preserves historical department attribution after transfers.
-- **Current department** joins to the employee's `is_current = TRUE` version, restating all of that employee's reviews under today's department.
-
-Both views use the same review scores and department-level dense ranking; only the department attribution changes.
+If the warehouse is unavailable, analytics use the locally generated CSVs so the dashboards and department toggle remain demonstrable; database write forms still require a configured MySQL server.
 
 ## Tests
 
